@@ -20,6 +20,13 @@ import os
 import sys
 import serial
 
+# for vice
+import socket
+import binascii
+useSocket=True
+HOST='0.0.0.0' #'127.0.0.1'
+PORT=25233
+
 # JSON-HTTP RPC Configuration
 # This will be particular to your local ~/.bitcoin/bitcoin.conf
 
@@ -366,11 +373,34 @@ def block_make_submit(block):
 # Block Miner
 ################################################################################
 
-def sb(serial_port, b):
+# GameBoy serial connectoin
+def sb_gb_serial(serial_port, b):
     serial_port.flushInput()
     serial_port.write(b)
     time.sleep(0.02)
     return serial_port.read(1)
+
+# VICE rs232 socket
+def sb_socket(socket_conn, b):
+    for c in b:
+        if c==0:
+            socket_conn.sendall(b'\x01\x01')
+        elif c==1:
+            socket_conn.sendall(b'\x01\x02')
+        else:
+            socket_conn.sendall(struct.pack('B',c))
+    time.sleep(0.02)
+
+def rd_socket(socket_conn):
+    try:
+        c = socket_conn.recv(1)
+    except socket.timeout:
+        return None
+    else:
+        if len(c)==0:
+            return None
+        else:
+            return c
 
 def block_mine(block_template, coinbase_message, extranonce_start, address, serial_port, timeout=None, debugnonce_start=False):
     """
@@ -426,46 +456,71 @@ def block_mine(block_template, coinbase_message, extranonce_start, address, seri
         nonce = 0 if not debugnonce_start else debugnonce_start
 
         while True:
+            if useSocket:
+                print("Waiting for connection on ", HOST, ":", PORT)
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.bind((HOST,PORT))
+                s.listen()
+                conn, addr = s.accept()
+                print("Connected by ", addr)
+                print("...syncing")
+                conn.send(b'\x00\x00\x00\x00\x00\x00\x00\xff')
+
             # Send block header
             print("Sending block header...")
-            sb(serial_port, b"A")
-            for i in range(0, 76):
-                bh = bytes(block_header)
-                sb(serial_port, bh[i:i+1])
+            sb_socket(conn, b"A")
+            sb_socket(conn, bytes(block_header))
+            print(binascii.hexlify(bytes(block_header)))
+            #sb(serial_port, b"A")
+            #for i in range(0, 76):
+            #    bh = bytes(block_header)
+            #    sb(serial_port, bh[i:i+1])
 
             print("Sending target value...")
-            sb(serial_port, b"B")
-            for i in range(32):
-                sb(serial_port, target_hash[i:i+1])
-            print("Game Boy mining now.")
+            sb_socket(conn, b"B")
+            sb_socket(conn, target_hash)
+            print(binascii.hexlify(bytes(target_hash)))
+            print("Sending starting nonce...")
+            sb_socket(conn, b'E');
+            sb_socket(conn, struct.pack('<L',nonce));
+            print(binascii.hexlify(struct.pack('>L',nonce)))
+            print("C64 mining now.")
+            #sb(serial_port, b"B")
+            #for i in range(32):
+            #    sb(serial_port, target_hash[i:i+1])
+            #print("Game Boy mining now.")
 
             while True:
-                time.sleep(4)
-                serial_port.flushInput()
-                # serial_port.read()
-                status = sb(serial_port, b"D")
-                if status == b"\x63":
+                time.sleep(.1)
+                #serial_port.flushInput()
+                ## serial_port.read()
+                #status = sb(serial_port, b"D")
+                status = rd_socket(conn)
+                #print("status:", str(status))
+                if status is not None and status == b"\x63":
                     print("Success!")
+                    sb_socket(conn, b'D')
                     result = bytearray()
-                    result += sb(serial_port, b"1")
-                    result += sb(serial_port, b"1")
-                    result += sb(serial_port, b"1")
-                    result += sb(serial_port, b"1")
+                    result += rd_socket(conn)
+                    result += rd_socket(conn)
+                    result += rd_socket(conn)
+                    result += rd_socket(conn)
+                    s.close()
+                    print(binascii.hexlify(result[::-1]))
                     block_header = block_header[0:76] + result
                     block_hash = block_compute_raw_hash(block_header)
                     nonce = struct.unpack("<I", result)[0]
                     block_template['nonce'] = nonce
                     block_template['hash'] = block_hash.hex()
-                    time.sleep(0.5)
                     return (block_template, hash_rate)
-                    break
                     
                 time_stamp = time.time()
                 # If our mine time expired, return none
                 if timeout and (time_stamp - time_start) > timeout:
                     print("Timeout!")
                     time.sleep(1)
-                    sb(serial_port, b"C")
+                    #sb(serial_port, b"C")
+                    sb_socket(conn, b"C")
                     time.sleep(1)
                     return (None, hash_rate)
 
@@ -484,7 +539,7 @@ def block_mine(block_template, coinbase_message, extranonce_start, address, seri
 
 
 def standalone_miner(coinbase_message, address, serial_port):
-    sp = serial.Serial(serial_port, 9600)
+    sp = serial.Serial(serial_port, 1200)
     while True:
         block_template = rpc_getblocktemplate()
 

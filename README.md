@@ -1,6 +1,9 @@
-# ntgbtminer - Game Boy edition
+# ntgbtminer - C64 serial port edition
 
-This is a version of ntgbtminer that works with the Game Boy bitcoin miner.
+This is a version of ntgbtminer that works with C64 serial port (1200 8N1)
+data transmitted over TCP sockets from VICE x64 emulator.
+
+With tiny changes it will work with real serial port devices.
 
 # ntgbtminer
 

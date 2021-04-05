@@ -252,13 +252,14 @@ class TestBlock(unittest.TestCase):
         block_vector['coinbasevalue'] = 2505860000
 
         # Test timeout with different extra_nonce_start
-        reset_block_vector()
-        mined_block, hash_rate = ntgbtminer.block_mine(block_vector, coinbase_message, 0, address, timeout=1, debugnonce_start=2315460000)
-        self.assertEqual(mined_block, None)
+#        reset_block_vector()
+#        mined_block, hash_rate = ntgbtminer.block_mine(block_vector, coinbase_message, extra_nonce_start, address, None, timeout=120, debugnonce_start=2315762778-10)
+#        self.assertEqual(mined_block, None)
 
         # Test success
         reset_block_vector()
-        mined_block, hash_rate = ntgbtminer.block_mine(block_vector, coinbase_message, extra_nonce_start, address, timeout=60, debugnonce_start=2315460000)
+        print("Expecting: 000000000000000a369033d52a4aa264844b50857f0c6104c555d53938e9c8d7")
+        mined_block, hash_rate = ntgbtminer.block_mine(block_vector, coinbase_message, extra_nonce_start, address, None, timeout=60, debugnonce_start=2315762778-5)
         self.assertEqual(mined_block['hash'], "000000000000000a369033d52a4aa264844b50857f0c6104c555d53938e9c8d7")
 
 
